@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:movielistsuggest/models/movie.dart';
 import 'package:movielistsuggest/pages/MovieDetailspage.dart';
 import 'package:movielistsuggest/services/movie_api_service.dart';
+import 'package:movielistsuggest/services/watch_list_service.dart';
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key});
@@ -13,6 +14,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _searchController = TextEditingController();
   final MovieApiService apiService = MovieApiService();
+  final WatchListService _watchListService = WatchListService();
   List<Movie> _searchResults = [];
   bool isLoading = false;
 
@@ -33,6 +35,20 @@ class _MyHomePageState extends State<MyHomePage> {
         isLoading = false; // This was set to true, fixed to false
       });
     }
+  }
+
+  void addToWatchList(Movie movie) async {
+    final added = await _watchListService.addMovie(movie);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          added
+              ? '${movie.title} added to watch list'
+              : '${movie.title} is already in your watch list',
+        ),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -116,6 +132,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                           color: Colors.grey[300],
                                           child: Icon(Icons.movie, size: 30),
                                         ),
+
                                 title: Text(
                                   movie.title,
                                   style: TextStyle(fontWeight: FontWeight.bold),
@@ -123,11 +140,29 @@ class _MyHomePageState extends State<MyHomePage> {
                                 subtitle: Text(
                                   '${movie.year} ${movie.voteAverage != null ? '• ⭐ ${movie.voteAverage!.toStringAsFixed(1)}' : ''}',
                                 ),
+                                trailing: IconButton(
+                                  onPressed: () {
+                                    addToWatchList(movie);
+                                  },
+                                  icon:
+                                      _watchListService.isInWatchList(movie.id)
+                                          ? Icon(
+                                            Icons.check_circle,
+                                            color: Colors.green,
+                                          )
+                                          : Icon(Icons.add_circle_outline),
+                                  tooltip:
+                                      _watchListService.isInWatchList(movie.id)
+                                          ? 'Already in Watch List'
+                                          : 'Add to Watch List',
+                                ),
                                 onTap: () {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => MovieDetailsPage(),
+                                      builder:
+                                          (context) =>
+                                              MovieDetailsPage(movie: movie),
                                     ),
                                   );
                                 },

@@ -17,6 +17,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.blue),
       home: const MainPage(),
+      navigatorObservers: [HeroController()],
       routes: {
         '/home': (context) => const MyHomePage(),
         '/suggestion': (context) => const SuggestionPage(),
@@ -50,7 +51,7 @@ class _MainPageState extends State<MainPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: pages[selectedIndex],
+      body: IndexedStack(index: selectedIndex, children: pages),
 
       bottomNavigationBar: Container(
         margin: EdgeInsets.all(20),
