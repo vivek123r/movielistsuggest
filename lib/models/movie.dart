@@ -34,10 +34,10 @@ class Movie {
     return Movie(
       id: json['id'] ?? 0,
       title: json['title'] ?? 'Unknown',
-      posterPath: json['poster_path'],
-      backdropPath: json['backdrop_path'],
-      releaseDate: json['release_date'],
-      voteAverage: json['vote_average']?.toDouble(),
+      posterPath: json['posterPath'] ?? json['poster_path'],
+      backdropPath: json['backdropPath'] ?? json['backdrop_path'],
+      releaseDate: json['releaseDate'] ?? json['release_date'],
+      voteAverage: (json['voteAverage'] ?? json['vote_average'])?.toDouble(),
       overview: json['overview'],
     );
   }
