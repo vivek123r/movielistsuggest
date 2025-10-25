@@ -13,9 +13,32 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Movie List Suggest',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue),
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: Colors.grey[900],
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.grey[700],
+          elevation: 0,
+        ),
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          backgroundColor: Color(0xFF1E1E1E),
+          selectedItemColor: Colors.tealAccent,
+          unselectedItemColor: Colors.grey[700],
+        ),
+        colorScheme: const ColorScheme.dark(
+          primary: Colors.tealAccent,
+          secondary: Colors.tealAccent,
+          surface: Color(0xFF1E1E1E),
+          background: Colors.black,
+        ),
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Colors.white70),
+          titleLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          titleMedium: TextStyle(color: Colors.white),
+        ),
+      ),
       home: const MainPage(),
       navigatorObservers: [HeroController()],
       routes: {
@@ -52,25 +75,25 @@ class _MainPageState extends State<MainPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: selectedIndex, children: pages),
-
+      
       bottomNavigationBar: Container(
-        margin: EdgeInsets.all(20),
-        decoration: BoxDecoration(
+        margin: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
           borderRadius: BorderRadius.all(Radius.circular(20)),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.all(Radius.circular(50)),
+          borderRadius: const BorderRadius.all(Radius.circular(50)),
           child: BottomNavigationBar(
             currentIndex: selectedIndex,
             onTap: indexPage,
             type: BottomNavigationBarType.fixed,
-            backgroundColor: const Color.fromARGB(255, 164, 193, 216),
-            selectedItemColor: const Color.fromARGB(255, 179, 45, 45),
-            unselectedItemColor: Colors.white70,
+            backgroundColor: const Color(0xFF1E1E1E),
+            selectedItemColor: Colors.tealAccent,
+            unselectedItemColor: Colors.grey,
             iconSize: 20,
             selectedFontSize: 17,
             unselectedFontSize: 13,
-            elevation: 15,
+            elevation: 8,
             items: const [
               BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
               BottomNavigationBarItem(

@@ -16,8 +16,55 @@ class _MyHomePageState extends State<MyHomePage> {
   final MovieApiService apiService = MovieApiService();
   final WatchListService _watchListService = WatchListService();
   List<Movie> _searchResults = [];
+  List<Movie> _popularMovies = [];
+  List<Movie> _upcommingMovies = [];
   bool isLoading = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // Add listener to search controller
+    _searchController.addListener(() {
+      // Clear results when search box is empty
+      if (_searchController.text.isEmpty) {
+        setState(() {
+          _searchResults = [];
+        });
+      }
+    });
+  _loadPopularMovies();
+  _loadUpcomingMovies();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+  Future<void> _loadPopularMovies() async {
+    try {
+      final movies = await apiService.getPopularMovies();
+      print(movies);
+      setState(() {
+        _popularMovies = movies;
+      });
+      print('Loaded ${movies.length} popular movies');
+    } catch (e) {
+      print('Error loading popular movies: $e');
+    }
+  }
+  Future<void> _loadUpcomingMovies() async {
+    try {
+      final movies = await apiService.getUpcomingMovies();
+      print(movies);
+      setState(() {
+        _upcommingMovies = movies;
+      });
+      print('Loaded ${movies.length} upcoming movies');
+    } catch (e) {
+      print('Error loading upcoming movies: $e');
+    }
+  }
   Future<void> performSearch() async {
     setState(() {
       isLoading = true;
@@ -85,7 +132,120 @@ class _MyHomePageState extends State<MyHomePage> {
                     _searchResults.isEmpty && _searchController.text.isNotEmpty
                         ? Center(child: Text("No results found"))
                         : _searchResults.isEmpty
-                        ? Center(child: Text("Search for movies"))
+                        ? Center(child: 
+                        Column(
+                          children: [
+                            Text("Popular Movies"),
+                            SizedBox(height: 16),
+                              SizedBox(
+                                height: 220,
+                                child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _popularMovies.length,
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                itemBuilder: (context, index) {
+                                  final movie = _popularMovies[index];
+                                  return GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => MovieDetailsPage(movie: movie),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      width: 120,
+                                      margin: EdgeInsets.only(right: 12),
+                                      child: Column(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: Image.network(
+                                              movie.posterUrl,
+                                              width: 120,
+                                              height: 160,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => Container(
+                                                width: 120,
+                                                height: 160,
+                                                color: Colors.grey[800],
+                                                child: Icon(Icons.movie, size: 50),
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(height: 8),
+                                          Text(
+                                            movie.title,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              ),
+                              SizedBox(height: 16),
+                              Text("Upcoming Movies"),
+                              SizedBox(
+                                height: 220,
+                                child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _upcommingMovies.length,
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                itemBuilder: (context, index) {
+                                  final movie = _upcommingMovies[index];
+                                  return GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => MovieDetailsPage(movie: movie),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      width: 120,
+                                      margin: EdgeInsets.only(right: 12),
+                                      child: Column(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: Image.network(
+                                              movie.posterUrl,
+                                              width: 120,
+                                              height: 160,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => Container(
+                                                width: 120,
+                                                height: 160,
+                                                color: Colors.grey[800],
+                                                child: Icon(Icons.movie, size: 50),
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(height: 8),
+                                          Text(
+                                            movie.title,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              ),
+                            ],
+                          ),
+                        )
                         : ListView.builder(
                           itemCount: _searchResults.length,
                           itemBuilder: (context, index) {
