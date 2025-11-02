@@ -17,7 +17,8 @@ class _MyHomePageState extends State<MyHomePage> {
   final WatchListService _watchListService = WatchListService();
   List<Movie> _searchResults = [];
   List<Movie> _popularMovies = [];
-  List<Movie> _upcommingMovies = [];
+  List<Movie> _latestMovies = [];
+  List<Movie> _similarMovies = [];
   bool isLoading = false;
 
   @override
@@ -32,8 +33,16 @@ class _MyHomePageState extends State<MyHomePage> {
         });
       }
     });
-  _loadPopularMovies();
-  _loadUpcomingMovies();
+    _loadPopularMovies();
+    _getLatestMovies();
+    _loadWatchlistAndSimilarMovies();
+  }
+  
+  Future<void> _loadWatchlistAndSimilarMovies() async {
+    // Wait for watchlist to load from storage
+    await Future.delayed(Duration(seconds: 2));
+    print('Watchlist count: ${_watchListService.watchList.length}');
+    await _getSimilarMovies();
   }
 
   @override
@@ -53,16 +62,72 @@ class _MyHomePageState extends State<MyHomePage> {
       print('Error loading popular movies: $e');
     }
   }
-  Future<void> _loadUpcomingMovies() async {
+  Future<void> _getLatestMovies() async {
+      try {
+        final movies = await apiService.getLatestMovies();
+        print(movies);
+        setState(() {
+          _latestMovies = movies;
+        });
+        print('Loaded ${movies.length} latest movies');
+      } catch (e) {
+        print('Error loading latest movies: $e');
+      }
+  }
+  Future<void> _getSimilarMovies() async {
     try {
-      final movies = await apiService.getUpcomingMovies();
-      print(movies);
+      // Get all movies from watchlist
+      final watchlistMovies = _watchListService.watchList;
+      
+      if (watchlistMovies.isEmpty) {
+        print('Watchlist is empty, no similar movies to fetch');
+        setState(() {
+          _similarMovies = [];
+        });
+        return;
+      }
+      
+      print('Fetching similar movies based on ${watchlistMovies.length} watchlist movies');
+      
+      List<Movie> allSimilarMovies = [];
+      
+      // Get similar movies for each movie in the watchlist (limit to first 5 to avoid too many API calls)
+      final moviesToCheck = watchlistMovies.take(5).toList();
+      
+      for (final movie in moviesToCheck) {
+        try {
+          print('Fetching similar movies for: ${movie.title} (ID: ${movie.id})');
+          final similarMovies = await apiService.getSimilarMovies(movie.id);
+          print('Found ${similarMovies.length} similar movies for ${movie.title}');
+          allSimilarMovies.addAll(similarMovies);
+        } catch (e) {
+          print('Error fetching similar movies for ${movie.title}: $e');
+        }
+      }
+      
+      // Remove duplicates based on movie ID
+      final seen = <int>{};
+      final uniqueMovies = allSimilarMovies.where((movie) {
+        if (seen.contains(movie.id)) {
+          return false;
+        }
+        seen.add(movie.id);
+        return true;
+      }).toList();
+      
+      // Shuffle and limit to 20 movies
+      uniqueMovies.shuffle();
+      final randomMovies = uniqueMovies.take(20).toList();
+      
       setState(() {
-        _upcommingMovies = movies;
+        _similarMovies = randomMovies;
       });
-      print('Loaded ${movies.length} upcoming movies');
+      print('Loaded ${randomMovies.length} random similar movies from ${uniqueMovies.length} unique movies');
     } catch (e) {
-      print('Error loading upcoming movies: $e');
+      print('Error loading similar movies: $e');
+      setState(() {
+        _similarMovies = [];
+      });
     }
   }
   Future<void> performSearch() async {
@@ -132,10 +197,17 @@ class _MyHomePageState extends State<MyHomePage> {
                     _searchResults.isEmpty && _searchController.text.isNotEmpty
                         ? Center(child: Text("No results found"))
                         : _searchResults.isEmpty
-                        ? Center(child: 
-                        Column(
+                        ? SingleChildScrollView(
+                          child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Text("Popular Movies"),
+                            Text(
+                              "Popular Movies",
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             SizedBox(height: 16),
                               SizedBox(
                                 height: 220,
@@ -189,16 +261,23 @@ class _MyHomePageState extends State<MyHomePage> {
                                 },
                               ),
                               ),
+                              SizedBox(height: 24),
+                              Text(
+                                "Latest Movies",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               SizedBox(height: 16),
-                              Text("Upcoming Movies"),
                               SizedBox(
                                 height: 220,
                                 child: ListView.builder(
                                 scrollDirection: Axis.horizontal,
-                                itemCount: _upcommingMovies.length,
+                                itemCount: _latestMovies.length,
                                 padding: EdgeInsets.symmetric(horizontal: 16),
                                 itemBuilder: (context, index) {
-                                  final movie = _upcommingMovies[index];
+                                  final movie = _latestMovies[index];
                                   return GestureDetector(
                                     onTap: () {
                                       Navigator.push(
@@ -243,6 +322,75 @@ class _MyHomePageState extends State<MyHomePage> {
                                 },
                               ),
                               ),
+                              SizedBox(height: 24),
+                              Text(
+                                "Movies you may like",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(height: 16),
+                              SizedBox(
+                                height: 220,
+                                child: _similarMovies.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      'Add movies to watchlist to get recommendations',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                  )
+                                : ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _similarMovies.length,
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                itemBuilder: (context, index) {
+                                  final movie = _similarMovies[index];
+                                  return GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => MovieDetailsPage(movie: movie),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      width: 120,
+                                      margin: EdgeInsets.only(right: 12),
+                                      child: Column(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: Image.network(
+                                              movie.posterUrl,
+                                              width: 120,
+                                              height: 160,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => Container(
+                                                width: 120,
+                                                height: 160,
+                                                color: Colors.grey[800],
+                                                child: Icon(Icons.movie, size: 50),
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(height: 8),
+                                          Text(
+                                            movie.title,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              ),
+                              SizedBox(height: 16),
                             ],
                           ),
                         )

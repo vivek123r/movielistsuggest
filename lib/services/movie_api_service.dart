@@ -129,30 +129,57 @@ class MovieApiService {
   }
 
   // Get upcoming movies
-  Future<List<Movie>> getUpcomingMovies({int page = 1}) async {
+  // Get upcoming movies
+Future<List<Movie>> getLatestMovies({int page = 1}) async {
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
-        print('Fetching upcoming movies, attempt ${attempt + 1}');
+        print('Fetching latest movies, attempt ${attempt + 1}');
         
         final result = await tmdb.v3.movies.getUpcoming(page: page);
 
         if (result['results'] != null) {
           final List<dynamic> movieResults = result['results'];
-          print('Found ${movieResults.length} upcoming movies');
+          print('Found ${movieResults.length} latest movies');
           return movieResults.map((json) => Movie.fromJson(json)).toList();
         } else {
-          print('No upcoming movies found');
+          print('No latest movies found');
         }
       } catch (e) {
-        print('Error fetching upcoming movies on attempt ${attempt + 1}: $e');
+        print('Error fetching latest movies on attempt ${attempt + 1}: $e');
         if (attempt < 2) {
           await Future.delayed(Duration(milliseconds: 1000));
         } else {
-          print('All attempts failed for upcoming movies');
+          print('All attempts failed for latest movies');
           return [];
         }
       }
     }
     return [];
   }
+  Future<List<Movie>> getSimilarMovies(int movieId, {int page = 1}) async {
+  for (int attempt = 0; attempt < 3; attempt++) {
+    try {
+      print('Fetching similar movies for $movieId, attempt ${attempt + 1}');
+      
+      final result = await tmdb.v3.movies.getSimilar(movieId, page: page);
+
+      if (result['results'] != null) {
+        final List<dynamic> movieResults = result['results'];
+        print('Found ${movieResults.length} similar movies');
+        return movieResults.map((json) => Movie.fromJson(json)).toList();
+      } else {
+        print('No similar movies found');
+      }
+    } catch (e) {
+      print('Error fetching similar movies on attempt ${attempt + 1}: $e');
+      if (attempt < 2) {
+        await Future.delayed(Duration(milliseconds: 1000));
+      } else {
+        print('All attempts failed for similar movies');
+        return [];
+      }
+    }
+  }
+  return [];
+}
 }

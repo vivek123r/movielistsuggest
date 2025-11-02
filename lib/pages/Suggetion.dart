@@ -82,18 +82,13 @@ class _SuggestionPageState extends State<SuggestionPage> {
   // Update the _getGeminiSuggestions method to handle null values and different JSON structures
 
   Future<List<String>> _getGeminiSuggestions(String prompt) async {
-    // First, change the model name to gemini-pro instead of gemini-2.5-pro
-    const apiKey = 'AIzaSyCiMqyy2HVu2Pa7Rlzqss6qGfbfBllJzyI';
+    const apiKey = 'AIzaSyDIkzcNqeOPeANHqzpYtCjHZXfP-jAuhB8';
     final uri = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=$apiKey',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}',
     );
 
     try {
-      final fullPrompt =
-          'Suggest 5 movies based on this request: "$prompt". '
-          'Return only the movie titles as a numbered list. '
-          'Be concise and only list the titles without additional text.';
-
+      // Simple prompt - just ask for 10 movie titlesS
       final response = await http.post(
         uri,
         headers: {'Content-Type': 'application/json'},
@@ -101,74 +96,74 @@ class _SuggestionPageState extends State<SuggestionPage> {
           'contents': [
             {
               'parts': [
-                {'text': fullPrompt},
+                {'text': '''User request: "$prompt"
+
+If the user is asking for movies in a specific franchise/series (e.g., "all fast and furious", "harry potter movies", "marvel movies"), list the actual movies from that franchise.
+If the user is asking for recommendations (e.g., "sad movies", "action movies", "movies like inception"), suggest 10 similar real movies.
+
+Return ONLY movie titles, one per line. No explanations, no numbering, no additional text.'''},
               ],
             },
           ],
           'generationConfig': {
             'temperature': 0.7,
-            'topK': 40,
-            'topP': 0.95,
-            'maxOutputTokens': 1024,
+            'maxOutputTokens': 250,
           },
         }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print('Full API Response: ${response.body}');
 
-        // Add proper null checks to prevent the "method called on null" error
-        if (data == null ||
-            data['candidates'] == null ||
-            data['candidates'].isEmpty ||
-            data['candidates'][0]['content'] == null ||
-            data['candidates'][0]['content']['parts'] == null ||
-            data['candidates'][0]['content']['parts'].isEmpty) {
-          print('Invalid response structure: ${response.body}');
+        // Extract text from response
+        final text = data['candidates']?[0]?['content']?['parts']?[0]?['text'];
+        
+        if (text == null || text.isEmpty) {
+          print('No text in AI response, using fallback');
           return _getFallbackMovieSuggestions(prompt);
         }
 
-        final text = data['candidates'][0]['content']['parts'][0]['text'];
-        if (text == null) {
-          print('No text in response: ${response.body}');
-          return _getFallbackMovieSuggestions(prompt);
-        }
+        print('AI response: $text');
 
-        // Extract movie titles from the response
-        List<String> titles = [];
+        // Extract movie titles - split by newlines and clean up
         final lines = text.split('\n');
-
+        final List<String> titles = [];
+        
         for (var line in lines) {
-          // Remove numbering and extra characters
           line = line.trim();
           if (line.isEmpty) continue;
-
-          // Parse out the numbered list format: "1. Movie Title" or "1) Movie Title"
-          final regExp = RegExp(r'^\d+[\.\)\:]?\s*(.+)$');
-          final match = regExp.firstMatch(line);
-
-          if (match != null && match.groupCount >= 1) {
-            titles.add(match.group(1)!.trim());
-          } else if (!line.startsWith('Here') &&
-              !line.contains('movies') &&
-              !line.contains('suggestions')) {
-            // Fallback if the format isn't as expected but isn't header text
+          
+          // Remove numbering, bullets, asterisks
+          line = line.replaceAll(RegExp(r'^\d+[\.\)\:\-]\s*'), '');
+          line = line.replaceAll(RegExp(r'^\*+\s*'), '');
+          line = line.replaceAll(RegExp(r'^[\-\•]\s*'), '');
+          line = line.trim();
+          
+          // Filter out invalid lines
+          if (line.isNotEmpty && 
+              line.length > 1 &&
+              !line.toLowerCase().startsWith('here') &&
+              !line.toLowerCase().startsWith('based on')) {
             titles.add(line);
+            if (titles.length >= 10) break;
           }
         }
 
+        print('Extracted ${titles.length} movie titles: $titles');
+
         if (titles.isEmpty) {
-          print('No titles extracted from: $text');
+          print('No valid titles extracted, using fallback');
           return _getFallbackMovieSuggestions(prompt);
         }
 
-        return titles.take(5).toList();
+        return titles;
       } else {
-        print('Error response: ${response.statusCode} ${response.body}');
+        print('API error: ${response.statusCode} - ${response.body}');
         return _getFallbackMovieSuggestions(prompt);
       }
     } catch (e) {
-      print('Error in AI suggestions: $e');
+      print('Exception in AI suggestions: $e');
       return _getFallbackMovieSuggestions(prompt);
     }
   }
@@ -231,11 +226,34 @@ class _SuggestionPageState extends State<SuggestionPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const SizedBox(height: 16),
           const Text(
             'AI Movie Recommendations',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
+              Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/aipic.jpg', // For local image
+                  height: 150,
+                  width: 150,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      height: 150,
+                      width: 150,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.movie_filter, size: 60),
+                    );
+                  },
+                ),
+              ),
+            ),
           const SizedBox(height: 16),
           const Text(
             'Tell us what you want to watch:',
@@ -441,20 +459,23 @@ class _SuggestionPageState extends State<SuggestionPage> {
                                           },
                                         ),
                                         const SizedBox(width: 8),
-                                        ElevatedButton.icon(
+                                        Flexible(
+                                          child: ElevatedButton.icon(
                                           icon: Icon(
                                             _watchListService.isInWatchList(
                                                   movie.id,
                                                 )
                                                 ? Icons.check
                                                 : Icons.add,
+                                              size: 16
                                           ),
                                           label: Text(
                                             _watchListService.isInWatchList(
                                                   movie.id,
                                                 )
-                                                ? 'In Watchlist'
-                                                : 'Add to Watchlist',
+                                                ? 'Added'
+                                                : 'Add',
+                                              overflow: TextOverflow.ellipsis,
                                           ),
                                           onPressed: () {
                                             _watchListService.toggleMovie(
@@ -470,6 +491,7 @@ class _SuggestionPageState extends State<SuggestionPage> {
                                                     ? Colors.green
                                                     : null,
                                           ),
+                                        ),
                                         ),
                                       ],
                                     ),
