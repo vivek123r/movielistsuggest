@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:movielistsuggest/models/movie.dart';
 import 'package:movielistsuggest/pages/MovieDetailspage.dart';
-import 'package:movielistsuggest/services/watch_list_service.dart';
+import 'package:movielistsuggest/services/movie_list_service.dart';
+
+enum SortCriteria {
+  titleAsc,
+  titleDesc,
+  ratingAsc,
+  ratingDesc,
+  dateAddedAsc,
+  dateAddedDesc,
+}
 
 class WatchListPage extends StatefulWidget {
   const WatchListPage({super.key});
@@ -11,11 +20,12 @@ class WatchListPage extends StatefulWidget {
 }
 
 class _WatchListPageState extends State<WatchListPage> {
-  final WatchListService _watchListService = WatchListService();
+  final MovieListService _listService = MovieListService();
   List<Movie> _watchList = [];
   bool _isLoading = true;
   SortCriteria _currentSort = SortCriteria.titleAsc;
-
+  String _selectedListId = 'watchlist'; // Default to watch list
+  
   // Stats
   int _totalMovies = 0;
   double _averageRating = 0.0;
@@ -23,43 +33,217 @@ class _WatchListPageState extends State<WatchListPage> {
   @override
   void initState() {
     super.initState();
-    _watchListService.watchListNotifier.addListener(_refreshList);
-    _loadWatchList();
+    _listService.addListener(_refreshList);
+    _ensureInitialized();
+  }
+
+  Future<void> _ensureInitialized() async {
+    // Wait for service to be initialized
+    if (!_listService.isInitialized) {
+      await _listService.initialize();
+    }
+    _loadList();
   }
 
   @override
   void dispose() {
-    _watchListService.watchListNotifier.removeListener(_refreshList);
+    _listService.removeListener(_refreshList);
     super.dispose();
   }
 
   void _refreshList() {
     if (mounted) {
-      setState(() {
-        _watchList = _watchListService.watchList;
-        _updateStats();
-      });
+      _loadList();
     }
   }
 
-  Future<void> _loadWatchList() async {
+  Future<void> _loadList() async {
     setState(() {
       _isLoading = true;
     });
 
-    await _watchListService.loadWatchList();
-
+    final list = _listService.getList(_selectedListId);
+    
     setState(() {
-      _watchList = _watchListService.watchList;
+      _watchList = list?.movies ?? [];
       _isLoading = false;
       _updateStats();
     });
   }
 
   void _updateStats() {
-    final stats = _watchListService.getStats();
+    final stats = _listService.getListStats(_selectedListId);
     _totalMovies = stats['totalMovies'];
     _averageRating = stats['averageRating'];
+  }
+
+  void _sortList(SortCriteria criteria) {
+    setState(() {
+      _currentSort = criteria;
+      switch (criteria) {
+        case SortCriteria.titleAsc:
+          _watchList.sort((a, b) => a.title.compareTo(b.title));
+          break;
+        case SortCriteria.titleDesc:
+          _watchList.sort((a, b) => b.title.compareTo(a.title));
+          break;
+        case SortCriteria.ratingAsc:
+          _watchList.sort((a, b) => (a.voteAverage ?? 0).compareTo(b.voteAverage ?? 0));
+          break;
+        case SortCriteria.ratingDesc:
+          _watchList.sort((a, b) => (b.voteAverage ?? 0).compareTo(a.voteAverage ?? 0));
+          break;
+        case SortCriteria.dateAddedAsc:
+        case SortCriteria.dateAddedDesc:
+          // For now, keep original order
+          break;
+      }
+    });
+  }
+
+  void createList() {
+    final TextEditingController nameController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create Movie List'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'List Name',
+                hintText: 'e.g., Action Movies, Favorites',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () async {
+              String listName = nameController.text.trim();
+              if (listName.isNotEmpty) {
+                final newListId = await _listService.createList(listName);
+                setState(() {
+                  _selectedListId = newListId;
+                });
+                await _loadList();
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('List "$listName" created!')),
+                );
+              }
+            },
+            child: const Text('CREATE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showListSelector() {
+    final allLists = _listService.allLists;
+    
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text(
+              'Select List',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const Divider(),
+          ...allLists.map(
+            (list) => ListTile(
+              leading: Icon(
+                _selectedListId == list.id
+                    ? Icons.check_circle
+                    : (list.id == 'liked'
+                        ? Icons.favorite
+                        : list.id == 'watchlist'
+                            ? Icons.bookmark
+                            : Icons.list),
+                color: _selectedListId == list.id
+                    ? Colors.blue
+                    : (list.id == 'liked' ? Colors.red : Colors.grey),
+              ),
+              title: Text(list.name),
+              subtitle: Text('${list.movies.length} movies'),
+              trailing: !list.isDefault
+                  ? IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _confirmDeleteList(list.id, list.name);
+                      },
+                    )
+                  : null,
+              onTap: () {
+                setState(() {
+                  _selectedListId = list.id;
+                });
+                _loadList();
+                Navigator.pop(context);
+              },
+            ),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.add_circle_outline, color: Colors.blue),
+            title: const Text('Create New List'),
+            onTap: () {
+              Navigator.pop(context);
+              createList();
+            },
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteList(String listId, String listName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "$listName"?'),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await _listService.deleteList(listId);
+              if (_selectedListId == listId) {
+                setState(() {
+                  _selectedListId = 'watchlist';
+                });
+                await _loadList();
+              }
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('List "$listName" deleted')),
+              );
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('DELETE'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -73,6 +257,16 @@ class _WatchListPageState extends State<WatchListPage> {
           // Stats display
           if (_watchList.isNotEmpty) _buildStatsCard(),
 
+          // createList
+          Center(
+            child: ElevatedButton(
+              onPressed: () {
+                createList();
+              },
+              child: const Text('Create Movie List'),
+            ),
+          ),
+
           // Movie list
           Expanded(
             child:
@@ -81,7 +275,7 @@ class _WatchListPageState extends State<WatchListPage> {
                     : _watchList.isEmpty
                     ? _buildEmptyState()
                     : RefreshIndicator(
-                      onRefresh: _loadWatchList,
+                      onRefresh: _loadList,
                       child: ListView.builder(
                         itemCount: _watchList.length,
                         itemBuilder: (context, index) {
@@ -97,13 +291,34 @@ class _WatchListPageState extends State<WatchListPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final currentList = _listService.getList(_selectedListId);
+    final listName = currentList?.name ?? 'Watch List';
+    
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Row(
         children: [
-          const Text(
-            "My Watch List",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          // List selector
+          InkWell(
+            onTap: _showListSelector,
+            child: Row(
+              children: [
+                Icon(
+                  _selectedListId == 'liked'
+                      ? Icons.favorite
+                      : _selectedListId == 'watchlist'
+                          ? Icons.bookmark
+                          : Icons.list,
+                  color: _selectedListId == 'liked' ? Colors.red : Colors.blue,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  listName,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const Icon(Icons.arrow_drop_down, size: 24),
+              ],
+            ),
           ),
           const Spacer(),
           // Sort button
@@ -310,10 +525,7 @@ class _WatchListPageState extends State<WatchListPage> {
                   title: Text(criteria.name),
                   onTap: () {
                     Navigator.pop(context);
-                    setState(() {
-                      _currentSort = criteria;
-                      _watchListService.sortWatchList(criteria);
-                    });
+                    _sortList(criteria);
                   },
                 ),
               ),
@@ -323,54 +535,55 @@ class _WatchListPageState extends State<WatchListPage> {
   }
 
   void _confirmClearList() {
+    final currentList = _listService.getList(_selectedListId);
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Clear watch list?'),
-            content: const Text(
-              'This will remove all movies from your watch list. This action cannot be undone.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('CANCEL'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _watchListService.clearWatchList();
-                },
-                child: const Text('CLEAR'),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: Text('Clear ${currentList?.name ?? "list"}?'),
+        content: const Text(
+          'This will remove all movies from this list. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL'),
           ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _listService.clearList(_selectedListId);
+              await _loadList();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('CLEAR'),
+          ),
+        ],
+      ),
     );
   }
 
   void _confirmDeleteMovie(Movie movie) {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Remove ${movie.title}?'),
-            content: const Text('Remove this movie from your watch list?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('CANCEL'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _watchListService.removeMovie(movie.id);
-                },
-                child: const Text('REMOVE'),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: Text('Remove ${movie.title}?'),
+        content: const Text('Remove this movie from this list?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL'),
           ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _listService.removeMovieFromList(_selectedListId, movie.id);
+              await _loadList();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('REMOVE'),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,15 +1,124 @@
 import 'package:flutter/material.dart';
 import 'package:movielistsuggest/models/movie.dart';
+import 'package:movielistsuggest/services/movie_list_service.dart';
 
-class MovieDetailsPage extends StatelessWidget {
+class MovieDetailsPage extends StatefulWidget {
   final Movie movie;
 
   const MovieDetailsPage({Key? key, required this.movie}) : super(key: key);
 
   @override
+  State<MovieDetailsPage> createState() => _MovieDetailsPageState();
+}
+
+class _MovieDetailsPageState extends State<MovieDetailsPage> {
+  final MovieListService _listService = MovieListService();
+
+  @override
+  void initState() {
+    super.initState();
+    _listService.addListener(_refresh);
+  }
+
+  @override
+  void dispose() {
+    _listService.removeListener(_refresh);
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  void _showAddToListDialog() {
+    // Filter out the "liked" list - it should only be accessible via the like button
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter setModalState) {
+          final allLists = _listService.allLists.where((list) => list.id != 'liked').toList();
+          
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Add to List',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const Divider(),
+              ...allLists.map(
+                (list) {
+                  final isInList = _listService.isInList(list.id, widget.movie.id);
+                  return ListTile(
+                    leading: Icon(
+                      list.id == 'watchlist'
+                          ? Icons.bookmark
+                          : Icons.list,
+                      color: isInList ? Colors.blue : Colors.grey,
+                    ),
+                    title: Text(list.name),
+                    subtitle: Text('${list.movies.length} movies'),
+                    trailing: isInList
+                        ? const Icon(Icons.check_circle, color: Colors.green)
+                        : const Icon(Icons.add_circle_outline, color: Colors.grey),
+                    onTap: () async {
+                      if (isInList) {
+                        await _listService.removeMovieFromList(list.id, widget.movie.id);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Removed from ${list.name}')),
+                        );
+                      } else {
+                        await _listService.addMovieToList(list.id, widget.movie);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Added to ${list.name}')),
+                        );
+                      }
+                      // Update both the dialog and the main page
+                      setModalState(() {});
+                      setState(() {});
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isLiked = _listService.isInList('liked', widget.movie.id);
+    final isInWatchlist = _listService.isInList('watchlist', widget.movie.id);
+    
     return Scaffold(
-      appBar: AppBar(title: Text(movie.title)),
+      appBar: AppBar(
+        title: Text(widget.movie.title),
+        actions: [
+          // Like button
+          IconButton(
+            icon: Icon(
+              isLiked ? Icons.favorite : Icons.favorite_border,
+            ),
+            tooltip: isLiked ? 'Unlike' : 'Like',
+            onPressed: () async {
+              await _listService.toggleLike(widget.movie);
+              setState(() {});
+            },
+          ),
+          // Add to list button
+          IconButton(
+            icon: const Icon(Icons.playlist_add),
+            tooltip: 'Add to list',
+            onPressed: _showAddToListDialog,
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -19,9 +128,9 @@ class MovieDetailsPage extends StatelessWidget {
               height: 200,
               width: double.infinity,
               child:
-                  movie.backdropUrl.isNotEmpty
+                  widget.movie.backdropUrl.isNotEmpty
                       ? Image.network(
-                        movie.backdropUrl,
+                        widget.movie.backdropUrl,
                         fit: BoxFit.cover,
                         errorBuilder:
                             (context, error, stackTrace) => Container(
@@ -29,9 +138,9 @@ class MovieDetailsPage extends StatelessWidget {
                               child: const Icon(Icons.movie, size: 80),
                             ),
                       )
-                      : (movie.posterUrl.isNotEmpty
+                      : (widget.movie.posterUrl.isNotEmpty
                           ? Image.network(
-                            movie.posterUrl,
+                            widget.movie.posterUrl,
                             fit: BoxFit.cover,
                             errorBuilder:
                                 (context, error, stackTrace) => Container(
@@ -45,13 +154,47 @@ class MovieDetailsPage extends StatelessWidget {
                           )),
             ),
 
+            // Action buttons
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        await _listService.toggleLike(widget.movie);
+                        setState(() {});
+                      },
+                      icon: Icon(isLiked ? Icons.favorite : Icons.favorite_border),
+                      label: Text(isLiked ? 'Liked' : 'Like'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        if (isInWatchlist) {
+                          await _listService.removeMovieFromList('watchlist', widget.movie.id);
+                        } else {
+                          await _listService.addMovieToList('watchlist', widget.movie);
+                        }
+                        setState(() {});
+                      },
+                      icon: Icon(isInWatchlist ? Icons.bookmark : Icons.bookmark_border),
+                      label: Text(isInWatchlist ? 'In Watchlist' : 'Watchlist'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    movie.title,
+                    widget.movie.title,
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -59,9 +202,9 @@ class MovieDetailsPage extends StatelessWidget {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Text(movie.year),
+                      Text(widget.movie.year),
                       const SizedBox(width: 16),
-                      if (movie.voteAverage != null)
+                      if (widget.movie.voteAverage != null)
                         Row(
                           children: [
                             const Icon(
@@ -70,7 +213,7 @@ class MovieDetailsPage extends StatelessWidget {
                               size: 20,
                             ),
                             const SizedBox(width: 4),
-                            Text(movie.voteAverage!.toStringAsFixed(1)),
+                            Text(widget.movie.voteAverage!.toStringAsFixed(1)),
                           ],
                         ),
                     ],
@@ -84,7 +227,7 @@ class MovieDetailsPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    movie.overview ?? 'No overview available.',
+                    widget.movie.overview ?? 'No overview available.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ],

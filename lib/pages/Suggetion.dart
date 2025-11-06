@@ -5,6 +5,8 @@ import 'package:movielistsuggest/models/movie.dart';
 import 'package:movielistsuggest/pages/MovieDetailspage.dart';
 import 'package:movielistsuggest/services/movie_api_service.dart';
 import 'package:movielistsuggest/services/watch_list_service.dart';
+// import 'package:video_player/video_player.dart';
+import 'package:movielistsuggest/services/watch_list_service.dart';
 
 class SuggestionPage extends StatefulWidget {
   const SuggestionPage({super.key});
@@ -17,6 +19,8 @@ class _SuggestionPageState extends State<SuggestionPage> {
   final TextEditingController _promptController = TextEditingController();
   final WatchListService _watchListService = WatchListService();
   final MovieApiService _movieApiService = MovieApiService();
+  // VideoPlayerController? _videoController;
+  // bool _videoInitialized = false;
 
   List<Movie> _suggestedMovies = [];
   bool _isLoading = false;
@@ -27,7 +31,36 @@ class _SuggestionPageState extends State<SuggestionPage> {
     super.initState();
     // Initialize with watch list if available
     _checkWatchList();
+    // initialize video controller for local asset video (if provided)
+    // Note: add your video file at assets/aibotvideo.mp4 and enable in pubspec.yaml
+    // _initializeVideo();
   }
+
+  // Future<void> _initializeVideo() async {
+  //   try {
+  //     _videoController = VideoPlayerController.asset(
+  //       'assets/aibotvideo2.mp4',
+  //       videoPlayerOptions: VideoPlayerOptions(
+  //         mixWithOthers: true,
+  //         allowBackgroundPlayback: false,
+  //       ),
+  //     );
+  //     await _videoController!.initialize();
+  //     _videoController!.setLooping(true);
+  //     _videoController!.setVolume(0.0); // Mute the video to reduce processing
+  //     _videoController!.play();
+  //     setState(() {
+  //       _videoInitialized = true;
+  //     });
+  //   } catch (e) {
+  //     // Video asset doesn't exist or failed to load - fall back to image
+  //     print('Video not available (will show image instead): $e');
+  //     setState(() {
+  //       _videoInitialized = false;
+  //       _videoController = null;
+  //     });
+  //   }
+  // }
 
   Future<void> _checkWatchList() async {
     await _watchListService.loadWatchList();
@@ -221,60 +254,101 @@ Return ONLY movie titles, one per line. No explanations, no numbering, no additi
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
+    return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 16),
-          const Text(
-            'AI Movie Recommendations',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-              Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.asset(
-                  'assets/aipic.jpg', // For local image
-                  height: 150,
-                  width: 150,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      height: 150,
-                      width: 150,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.movie_filter, size: 60),
-                    );
-                  },
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.blue.shade700, Colors.purple.shade600],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blue.withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'AI Recommendations',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
               ),
             ),
-          const SizedBox(height: 16),
-          const Text(
-            'Tell us what you want to watch:',
-            style: TextStyle(fontSize: 16),
           ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _promptController,
-            decoration: InputDecoration(
-              hintText:
-                  'E.g., "Action movies like Die Hard" or "Feel-good comedies"',
-              border: OutlineInputBorder(),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.clear),
-                onPressed: () => _promptController.clear(),
+          // Full width video/image - no padding, no gaps
+          // if (_videoInitialized && _videoController != null)
+          //   SizedBox(
+          //     width: double.infinity,
+          //     child: AspectRatio(
+          //       aspectRatio: _videoController!.value.aspectRatio,
+          //       child: VideoPlayer(_videoController!),
+          //     ),
+          //   )
+          // else
+            // Fallback image
+            SizedBox(
+              width: double.infinity,
+              child: Image.asset(
+                'assets/aibot2.png',
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    height: 200,
+                    child: const Icon(Icons.smart_toy, size: 80, color: Colors.blue),
+                  );
+                },
               ),
             ),
-            maxLines: 3,
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _promptController,
+                  decoration: InputDecoration(
+                    hintText: 'E.g., "Action movies like Die Hard" or "Feel-good comedies"',
+                    border: OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () => _promptController.clear(),
+                    ),
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
             onPressed: _isLoading ? null : _getMovieSuggestions,
             child:
                 _isLoading
@@ -299,7 +373,8 @@ Return ONLY movie titles, one per line. No explanations, no numbering, no additi
             ),
           const SizedBox(height: 16),
           _isLoading
-              ? const Expanded(
+              ? const SizedBox(
+                height: 300,
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -316,7 +391,8 @@ Return ONLY movie titles, one per line. No explanations, no numbering, no additi
                 ),
               )
               : _suggestedMovies.isEmpty
-              ? const Expanded(
+              ? const SizedBox(
+                height: 300,
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -332,8 +408,9 @@ Return ONLY movie titles, one per line. No explanations, no numbering, no additi
                   ),
                 ),
               )
-              : Expanded(
-                child: ListView.builder(
+              : ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
                   itemCount: _suggestedMovies.length,
                   itemBuilder: (context, index) {
                     final movie = _suggestedMovies[index];
@@ -505,7 +582,9 @@ Return ONLY movie titles, one per line. No explanations, no numbering, no additi
                     );
                   },
                 ),
-              ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -513,6 +592,7 @@ Return ONLY movie titles, one per line. No explanations, no numbering, no additi
 
   @override
   void dispose() {
+    // _videoController?.dispose();
     _promptController.dispose();
     super.dispose();
   }

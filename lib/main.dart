@@ -2,8 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:movielistsuggest/pages/HomePage.dart';
 import 'package:movielistsuggest/pages/Suggetion.dart';
 import 'package:movielistsuggest/pages/watchList.dart';
+import 'package:movielistsuggest/services/movie_list_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Movie List Service at app startup
+  final movieListService = MovieListService();
+  await movieListService.initialize();
+  
   runApp(const MyApp());
 }
 
@@ -45,6 +52,7 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const MyHomePage(),
         '/suggestion': (context) => const SuggestionPage(),
         '/watchlist': (context) => const WatchListPage(),
+
       },
     );
   }
