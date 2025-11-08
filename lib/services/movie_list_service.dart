@@ -61,6 +61,7 @@ class MovieListService extends ChangeNotifier {
   MovieListService._internal();
 
   final Map<String, MovieListData> _lists = {};
+  final Map<int, double> _movieRatings = {}; // Store user ratings (movieId -> rating)
   bool _isInitialized = false;
 
   // Getters
@@ -155,6 +156,17 @@ class MovieListService extends ChangeNotifier {
       } else {
         print('📂 No existing lists found in storage');
       }
+
+      // Load ratings
+      final ratingsJson = prefs.getString('movie_ratings');
+      if (ratingsJson != null && ratingsJson.isNotEmpty) {
+        final decoded = jsonDecode(ratingsJson) as Map<String, dynamic>;
+        _movieRatings.clear();
+        decoded.forEach((key, value) {
+          _movieRatings[int.parse(key)] = value as double;
+        });
+        print('⭐ Loaded ${_movieRatings.length} ratings from storage');
+      }
     } catch (e) {
       print('❌ Error loading lists from storage: $e');
     }
@@ -168,7 +180,14 @@ class MovieListService extends ChangeNotifier {
         Map.fromEntries(_lists.entries.map((e) => MapEntry(e.key, e.value.toJson()))),
       );
       await prefs.setString('all_movie_lists', listsJson);
-      print('💾 Saved ${_lists.length} lists to storage');
+      
+      // Save ratings
+      final ratingsJson = jsonEncode(
+        Map.fromEntries(_movieRatings.entries.map((e) => MapEntry(e.key.toString(), e.value))),
+      );
+      await prefs.setString('movie_ratings', ratingsJson);
+      
+      print('💾 Saved ${_lists.length} lists and ${_movieRatings.length} ratings to storage');
     } catch (e) {
       print('❌ Error saving lists to storage: $e');
     }
@@ -312,5 +331,51 @@ class MovieListService extends ChangeNotifier {
   // Copy movie to another list (doesn't remove from original)
   Future<void> copyMovie(Movie movie, String toListId) async {
     await addMovieToList(toListId, movie);
+  }
+
+  // Set user rating for a movie (0.0 to 10.0)
+  Future<void> setMovieRating(int movieId, double rating) async {
+    if (rating < 0.0 || rating > 10.0) {
+      print('❌ Invalid rating: $rating. Must be between 0.0 and 10.0');
+      return;
+    }
+    
+    _movieRatings[movieId] = rating;
+    await _saveToStorage();
+    notifyListeners();
+    print('⭐ Set rating for movie $movieId: $rating');
+  }
+
+  // Remove user rating for a movie
+  Future<void> removeMovieRating(int movieId) async {
+    _movieRatings.remove(movieId);
+    await _saveToStorage();
+    notifyListeners();
+    print('🗑️ Removed rating for movie $movieId');
+  }
+
+  // Get user rating for a movie (returns null if not rated)
+  double? getMovieRating(int movieId) {
+    return _movieRatings[movieId];
+  }
+
+  // Check if movie has been rated by user
+  bool isMovieRated(int movieId) {
+    return _movieRatings.containsKey(movieId);
+  }
+
+  // Get all rated movies
+  Map<int, double> get allRatings => Map.unmodifiable(_movieRatings);
+
+  // Get average user rating for movies in a list
+  double? getListAverageUserRating(String listId) {
+    final list = _lists[listId];
+    if (list == null || list.movies.isEmpty) return null;
+
+    final ratedMovies = list.movies.where((m) => _movieRatings.containsKey(m.id));
+    if (ratedMovies.isEmpty) return null;
+
+    final sum = ratedMovies.fold(0.0, (total, m) => total + (_movieRatings[m.id] ?? 0.0));
+    return sum / ratedMovies.length;
   }
 }

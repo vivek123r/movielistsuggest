@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:movielistsuggest/models/movie.dart';
 import 'package:movielistsuggest/services/movie_list_service.dart';
+import 'package:movielistsuggest/widgets/star_rating.dart';
 
 class MovieDetailsPage extends StatefulWidget {
   final Movie movie;
@@ -95,6 +96,11 @@ class _MovieDetailsPageState extends State<MovieDetailsPage> {
   Widget build(BuildContext context) {
     final isLiked = _listService.isInList('liked', widget.movie.id);
     final isInWatchlist = _listService.isInList('watchlist', widget.movie.id);
+    final userRating = _listService.getMovieRating(widget.movie.id);
+    
+    // Show rating only if movie is in liked or custom lists (not just watchlist)
+    final showRating = isLiked || _listService.getListsContainingMovie(widget.movie.id)
+        .any((list) => !list.isDefault);
     
     return Scaffold(
       appBar: AppBar(
@@ -214,10 +220,52 @@ class _MovieDetailsPageState extends State<MovieDetailsPage> {
                             ),
                             const SizedBox(width: 4),
                             Text(widget.movie.voteAverage!.toStringAsFixed(1)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'TMDb',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                            ),
                           ],
                         ),
                     ],
                   ),
+                  // User rating section (only for liked or custom list movies, not watchlist only)
+                  if (showRating) ...[
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Your Rating',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    StarRating(
+                      initialRating: userRating ?? 0.0,
+                      onRatingChanged: (rating) async {
+                        if (rating == 0.0) {
+                          await _listService.removeMovieRating(widget.movie.id);
+                        } else {
+                          await _listService.setMovieRating(widget.movie.id, rating);
+                        }
+                        setState(() {});
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      userRating == null 
+                          ? 'Slide to rate this movie from 1 to 10'
+                          : 'Slide to change your rating',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Text(
                     'Overview',

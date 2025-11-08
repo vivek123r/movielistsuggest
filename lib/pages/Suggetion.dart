@@ -4,9 +4,8 @@ import 'dart:convert';
 import 'package:movielistsuggest/models/movie.dart';
 import 'package:movielistsuggest/pages/MovieDetailspage.dart';
 import 'package:movielistsuggest/services/movie_api_service.dart';
-import 'package:movielistsuggest/services/watch_list_service.dart';
+import 'package:movielistsuggest/services/movie_list_service.dart';
 // import 'package:video_player/video_player.dart';
-import 'package:movielistsuggest/services/watch_list_service.dart';
 
 class SuggestionPage extends StatefulWidget {
   const SuggestionPage({super.key});
@@ -17,7 +16,7 @@ class SuggestionPage extends StatefulWidget {
 
 class _SuggestionPageState extends State<SuggestionPage> {
   final TextEditingController _promptController = TextEditingController();
-  final WatchListService _watchListService = WatchListService();
+  final MovieListService _listService = MovieListService();
   final MovieApiService _movieApiService = MovieApiService();
   // VideoPlayerController? _videoController;
   // bool _videoInitialized = false;
@@ -63,12 +62,70 @@ class _SuggestionPageState extends State<SuggestionPage> {
   // }
 
   Future<void> _checkWatchList() async {
-    await _watchListService.loadWatchList();
-    if (_watchListService.watchList.isNotEmpty &&
-        _promptController.text.isEmpty) {
+    final watchlist = _listService.getList('watchlist');
+    if (watchlist != null && watchlist.movies.isNotEmpty && _promptController.text.isEmpty) {
       _promptController.text =
-          "Suggest movies similar to: ${_watchListService.watchList.take(3).map((m) => m.title).join(', ')}";
+          "Suggest movies similar to: ${watchlist.movies.take(3).map((m) => m.title).join(', ')}";
     }
+  }
+
+  void _showAddToListDialog(Movie movie) {
+    // Filter out the "liked" list
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter setModalState) {
+          final allLists = _listService.allLists.where((list) => list.id != 'liked').toList();
+          
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Add to List',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const Divider(),
+              ...allLists.map(
+                (list) {
+                  final isInList = _listService.isInList(list.id, movie.id);
+                  return ListTile(
+                    leading: Icon(
+                      list.id == 'watchlist' ? Icons.bookmark : Icons.list,
+                      color: isInList ? Colors.blue : Colors.grey,
+                    ),
+                    title: Text(list.name),
+                    subtitle: Text('${list.movies.length} movies'),
+                    trailing: isInList
+                        ? const Icon(Icons.check_circle, color: Colors.green)
+                        : const Icon(Icons.add_circle_outline, color: Colors.grey),
+                    onTap: () async {
+                      if (isInList) {
+                        await _listService.removeMovieFromList(list.id, movie.id);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Removed from ${list.name}')),
+                        );
+                      } else {
+                        await _listService.addMovieToList(list.id, movie);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Added to ${list.name}')),
+                        );
+                      }
+                      // Update both the dialog and the main page
+                      setModalState(() {});
+                      setState(() {});
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _getMovieSuggestions() async {
@@ -258,7 +315,7 @@ Return ONLY movie titles, one per line. No explanations, no numbering, no additi
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 16),
+          const SizedBox(height: 35),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Container(
@@ -280,6 +337,7 @@ Return ONLY movie titles, one per line. No explanations, no numbering, no additi
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
@@ -290,17 +348,20 @@ Return ONLY movie titles, one per line. No explanations, no numbering, no additi
                     child: const Icon(
                       Icons.auto_awesome,
                       color: Colors.white,
-                      size: 28,
+                      size: 24,
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Text(
-                    'AI Recommendations',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
+                  const Flexible(
+                    child: Text(
+                      'AI Recommendation',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -320,12 +381,13 @@ Return ONLY movie titles, one per line. No explanations, no numbering, no additi
             // Fallback image
             SizedBox(
               width: double.infinity,
+              height: 230,
               child: Image.asset(
                 'assets/aibot2.png',
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
-                    height: 200,
+                    height: 150,
                     child: const Icon(Icons.smart_toy, size: 80, color: Colors.blue),
                   );
                 },
@@ -519,56 +581,36 @@ Return ONLY movie titles, one per line. No explanations, no numbering, no additi
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
-                                        OutlinedButton.icon(
-                                          icon: const Icon(Icons.info_outline),
-                                          label: const Text('Details'),
-                                          onPressed: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder:
-                                                    (context) =>
-                                                        MovieDetailsPage(
-                                                          movie: movie,
-                                                        ),
-                                              ),
-                                            );
-                                          },
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => MovieDetailsPage(movie: movie),
+                                                ),
+                                              );
+                                            },
+                                            style: OutlinedButton.styleFrom(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                            ),
+                                            child: const Text('Details', style: TextStyle(fontSize: 12)),
+                                          ),
                                         ),
                                         const SizedBox(width: 8),
-                                        Flexible(
-                                          child: ElevatedButton.icon(
-                                          icon: Icon(
-                                            _watchListService.isInWatchList(
-                                                  movie.id,
-                                                )
-                                                ? Icons.check
-                                                : Icons.add,
-                                              size: 16
+                                        Expanded(
+                                          child: ElevatedButton(
+                                            onPressed: () {
+                                              _showAddToListDialog(movie);
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                            ),
+                                            child: const Text(
+                                              'Add to List',
+                                              style: TextStyle(fontSize: 12),
+                                            ),
                                           ),
-                                          label: Text(
-                                            _watchListService.isInWatchList(
-                                                  movie.id,
-                                                )
-                                                ? 'Added'
-                                                : 'Add',
-                                              overflow: TextOverflow.ellipsis,
-                                          ),
-                                          onPressed: () {
-                                            _watchListService.toggleMovie(
-                                              movie,
-                                            );
-                                            setState(() {});
-                                          },
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                _watchListService.isInWatchList(
-                                                      movie.id,
-                                                    )
-                                                    ? Colors.green
-                                                    : null,
-                                          ),
-                                        ),
                                         ),
                                       ],
                                     ),

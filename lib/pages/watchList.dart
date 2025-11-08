@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:movielistsuggest/models/movie.dart';
 import 'package:movielistsuggest/pages/MovieDetailspage.dart';
 import 'package:movielistsuggest/services/movie_list_service.dart';
+import 'package:movielistsuggest/widgets/star_rating.dart';
 
 enum SortCriteria {
   titleAsc,
@@ -10,6 +11,12 @@ enum SortCriteria {
   ratingDesc,
   dateAddedAsc,
   dateAddedDesc,
+}
+
+enum ComparisonOperator {
+  greaterThan,
+  lessThan,
+  equalTo,
 }
 
 class WatchListPage extends StatefulWidget {
@@ -25,6 +32,11 @@ class _WatchListPageState extends State<WatchListPage> {
   bool _isLoading = true;
   SortCriteria _currentSort = SortCriteria.titleAsc;
   String _selectedListId = 'watchlist'; // Default to watch list
+  
+  // Rating filter state
+  double _filterRatingValue = 8.0;
+  ComparisonOperator _comparisonOperator = ComparisonOperator.greaterThan;
+  bool _isFilterActive = false;
   
   // Stats
   int _totalMovies = 0;
@@ -66,9 +78,31 @@ class _WatchListPageState extends State<WatchListPage> {
     
     setState(() {
       _watchList = list?.movies ?? [];
+      _applyRatingFilter();
       _isLoading = false;
       _updateStats();
     });
+  }
+
+  void _applyRatingFilter() {
+    if (_selectedListId == 'watchlist' || !_isFilterActive) {
+      // No rating filter for watchlist or when filter is off
+      return;
+    }
+
+    _watchList = _watchList.where((movie) {
+      final rating = _listService.getMovieRating(movie.id);
+      if (rating == null) return false;
+
+      switch (_comparisonOperator) {
+        case ComparisonOperator.greaterThan:
+          return rating >= _filterRatingValue;
+        case ComparisonOperator.lessThan:
+          return rating <= _filterRatingValue;
+        case ComparisonOperator.equalTo:
+          return rating == _filterRatingValue;
+      }
+    }).toList();
   }
 
   void _updateStats() {
@@ -192,6 +226,7 @@ class _WatchListPageState extends State<WatchListPage> {
               onTap: () {
                 setState(() {
                   _selectedListId = list.id;
+                  _isFilterActive = false; // Reset filter when changing lists
                 });
                 _loadList();
                 Navigator.pop(context);
@@ -251,6 +286,7 @@ class _WatchListPageState extends State<WatchListPage> {
     return Container(
       child: Column(
         children: [
+          const SizedBox(height: 20),
           // Header with title and actions
           _buildHeader(context),
 
@@ -321,6 +357,16 @@ class _WatchListPageState extends State<WatchListPage> {
             ),
           ),
           const Spacer(),
+          // Filter button (only for lists with ratings)
+          if (_selectedListId != 'watchlist')
+            IconButton(
+              icon: Icon(
+                Icons.filter_list,
+                color: _isFilterActive ? Colors.blue : null,
+              ),
+              tooltip: 'Filter by rating',
+              onPressed: _showRatingFilter,
+            ),
           // Sort button
           IconButton(
             icon: const Icon(Icons.sort),
@@ -340,6 +386,10 @@ class _WatchListPageState extends State<WatchListPage> {
   }
 
   Widget _buildStatsCard() {
+    final userAvgRating = _selectedListId != 'watchlist' 
+        ? _listService.getListAverageUserRating(_selectedListId)
+        : null;
+    
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Padding(
@@ -354,11 +404,18 @@ class _WatchListPageState extends State<WatchListPage> {
             ),
             _buildStatItem(
               icon: Icons.star,
-              label: 'Avg Rating',
+              label: 'TMDb Avg',
               value:
                   _averageRating > 0 ? _averageRating.toStringAsFixed(1) : '-',
               color: Colors.amber,
             ),
+            if (userAvgRating != null)
+              _buildStatItem(
+                icon: Icons.grade,
+                label: 'Your Avg',
+                value: userAvgRating.toStringAsFixed(1),
+                color: Colors.blue,
+              ),
           ],
         ),
       ),
@@ -410,6 +467,9 @@ class _WatchListPageState extends State<WatchListPage> {
   }
 
   Widget _buildMovieCard(Movie movie) {
+    final userRating = _listService.getMovieRating(movie.id);
+    final showUserRating = _selectedListId != 'watchlist' && userRating != null;
+    
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -488,8 +548,35 @@ class _WatchListPageState extends State<WatchListPage> {
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'TMDb',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 11,
+                              ),
+                            ),
                           ],
                         ),
+                      // User rating (only for liked/custom lists)
+                      if (showUserRating) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.person,
+                              size: 14,
+                              color: Colors.blue,
+                            ),
+                            const SizedBox(width: 4),
+                            StarRatingDisplay(
+                              rating: userRating,
+                              size: 14,
+                              compact: true,
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -499,6 +586,213 @@ class _WatchListPageState extends State<WatchListPage> {
               IconButton(
                 icon: const Icon(Icons.delete_outline),
                 onPressed: () => _confirmDeleteMovie(movie),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showRatingFilter() {
+    String getOperatorSymbol() {
+      switch (_comparisonOperator) {
+        case ComparisonOperator.greaterThan:
+          return '≥';
+        case ComparisonOperator.lessThan:
+          return '≤';
+        case ComparisonOperator.equalTo:
+          return '=';
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.filter_list, color: Colors.blue),
+                const SizedBox(width: 8),
+                const Text('Filter by Rating'),
+                const Spacer(),
+                if (_isFilterActive)
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _isFilterActive = false;
+                      });
+                      Navigator.pop(context);
+                      _loadList();
+                    },
+                    child: const Text('Clear', style: TextStyle(color: Colors.red)),
+                  ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Select comparison operator:',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                // Operator buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildOperatorButton(
+                      '≥',
+                      'Greater than or equal',
+                      ComparisonOperator.greaterThan,
+                      setDialogState,
+                    ),
+                    _buildOperatorButton(
+                      '=',
+                      'Equal to',
+                      ComparisonOperator.equalTo,
+                      setDialogState,
+                    ),
+                    _buildOperatorButton(
+                      '≤',
+                      'Less than or equal',
+                      ComparisonOperator.lessThan,
+                      setDialogState,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Select rating value:',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                // Rating display
+                Center(
+                  child: Text(
+                    _filterRatingValue.toStringAsFixed(1),
+                    style: const TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Slider
+                Slider(
+                  value: _filterRatingValue,
+                  min: 0,
+                  max: 10,
+                  divisions: 10,
+                  label: _filterRatingValue.toStringAsFixed(1),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      _filterRatingValue = value;
+                    });
+                  },
+                ),
+                // Number markers
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: List.generate(11, (index) {
+                      return Text(
+                        '$index',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey[600],
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Preview text
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Show movies rated: ',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                      Text(
+                        '${getOperatorSymbol()} ${_filterRatingValue.toStringAsFixed(1)}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('CANCEL'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _isFilterActive = true;
+                  });
+                  Navigator.pop(context);
+                  _loadList();
+                },
+                child: const Text('APPLY FILTER'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildOperatorButton(
+    String symbol,
+    String tooltip,
+    ComparisonOperator operator,
+    StateSetter setDialogState,
+  ) {
+    final isSelected = _comparisonOperator == operator;
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+        child: ElevatedButton(
+          onPressed: () {
+            setDialogState(() {
+              _comparisonOperator = operator;
+            });
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isSelected ? Colors.blue : Colors.grey[300],
+            foregroundColor: isSelected ? Colors.white : Colors.black,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                symbol,
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                tooltip.split(' ')[0],
+                style: const TextStyle(fontSize: 10),
               ),
             ],
           ),

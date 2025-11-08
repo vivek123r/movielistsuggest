@@ -168,7 +168,7 @@ class _MyHomePageState extends State<MyHomePage> {
     return Container(
       child: Column(
         children: [
-          Text("search for movies"),
+          SizedBox(height: 50),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Row(
@@ -179,13 +179,25 @@ class _MyHomePageState extends State<MyHomePage> {
                     onSubmitted: (value) {
                       performSearch();
                     },
+                    hintText: 'Search movies...',
+                    backgroundColor: WidgetStateProperty.all(Colors.grey[850]),
+                    textStyle: WidgetStateProperty.all(
+                      const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                    hintStyle: WidgetStateProperty.all(
+                      TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 16,
+                      ),
+                    ),
+                    leading: const Icon(Icons.search, color: Colors.grey),
+                    elevation: WidgetStateProperty.all(2),
                   ),
                 ),
                 const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: performSearch,
-                  child: Icon(Icons.search),
-                ),
               ],
             ),
           ),
