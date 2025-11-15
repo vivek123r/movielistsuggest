@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "232328400352",
+    "project_id": "notional-arc-427914-n4",
+    "storage_bucket": "notional-arc-427914-n4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:232328400352:android:5b78a85299015f35afef85",
+        "android_client_info": {
+          "package_name": "com.example.movielistsuggest"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHFzMd0krnP6IdDfZWyuSenLnNx-2IHzw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

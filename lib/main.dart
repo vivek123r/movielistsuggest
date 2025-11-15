@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'package:movielistsuggest/pages/HomePage.dart';
 import 'package:movielistsuggest/pages/Suggetion.dart';
 import 'package:movielistsuggest/pages/watchList.dart';
+import 'package:movielistsuggest/pages/StreamingPage.dart';
+import 'package:movielistsuggest/pages/AuthWrapper.dart';
 import 'package:movielistsuggest/services/movie_list_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   
   // Initialize Movie List Service at app startup
   final movieListService = MovieListService();
@@ -46,10 +55,11 @@ class MyApp extends StatelessWidget {
           titleMedium: TextStyle(color: Colors.white),
         ),
       ),
-      home: const MainPage(),
+      home: const AuthWrapper(),
       navigatorObservers: [HeroController()],
       routes: {
         '/home': (context) => const MyHomePage(),
+        '/main': (context) => const MainPage(),
         '/suggestion': (context) => const SuggestionPage(),
         '/watchlist': (context) => const WatchListPage(),
 
@@ -72,6 +82,7 @@ class _MainPageState extends State<MainPage> {
     const MyHomePage(),
     const SuggestionPage(),
     const WatchListPage(),
+    const StreamingPage(),
   ];
   void indexPage(int index) {
     setState(() {
@@ -111,6 +122,10 @@ class _MainPageState extends State<MainPage> {
               BottomNavigationBarItem(
                 icon: Icon(Icons.bookmark),
                 label: 'WatchList',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.play_circle_outline),
+                label: 'Streaming',
               ),
             ],
           ),

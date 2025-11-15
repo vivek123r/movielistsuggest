@@ -1,5 +1,6 @@
 import 'package:movielistsuggest/models/movie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:movielistsuggest/services/firestore_service.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -28,6 +29,13 @@ class WatchListService {
     return _watchList.any((m) => m.id == movieId);
   }
 
+  // Force reload watchlist (used on login)
+  Future<void> reloadWatchList() async {
+    debugPrint('🔄 Reloading watchlist...');
+    _watchList.clear();
+    await loadWatchList();
+  }
+
   // Add movie to watch list
   Future<bool> addMovie(Movie movie) async {
     // Check if movie already exists in watchlist
@@ -39,6 +47,7 @@ class WatchListService {
     _watchList.add(movie);
     _notifyListeners();
     await _saveToPrefs();
+    await FirestoreService().saveWatchlist(_watchList); // Sync to Firestore
     debugPrint('Added ${movie.title} to watch list');
     return true;
   }
@@ -59,6 +68,7 @@ class WatchListService {
     if (_watchList.length != initialLength) {
       _notifyListeners();
       await _saveToPrefs();
+      await FirestoreService().saveWatchlist(_watchList); // Sync to Firestore
       debugPrint('Removed $movieTitle from watch list');
       return true;
     }
@@ -82,10 +92,26 @@ class WatchListService {
   // Load watch list from storage
   Future<void> loadWatchList() async {
     try {
+      // Try loading from Firestore first
+      try {
+        final cloudData = await FirestoreService().loadWatchlist();
+        if (cloudData.isNotEmpty) {
+          _watchList = cloudData;
+          _notifyListeners();
+          // Also update local storage
+          await _saveToPrefs();
+          debugPrint('Successfully loaded ${_watchList.length} movies from Firestore');
+          return;
+        }
+      } catch (e) {
+        debugPrint('Could not load from Firestore, falling back to local: $e');
+      }
+
+      // Fall back to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final watchListJson = prefs.getStringList('watchList') ?? [];
 
-      debugPrint('Loading ${watchListJson.length} movies from storage');
+      debugPrint('Loading ${watchListJson.length} movies from local storage');
 
       _watchList = [];
       for (final jsonString in watchListJson) {
@@ -99,6 +125,13 @@ class WatchListService {
       }
 
       _notifyListeners();
+      
+      // If we have local data, sync it to Firestore
+      if (_watchList.isNotEmpty) {
+        await FirestoreService().saveWatchlist(_watchList);
+        debugPrint('Synced ${_watchList.length} local movies to Firestore');
+      }
+      
       debugPrint('Successfully loaded ${_watchList.length} movies');
     } catch (e) {
       debugPrint('Error loading watch list: $e');

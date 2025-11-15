@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:movielistsuggest/models/movie.dart';
+import 'package:movielistsuggest/services/firestore_service.dart';
 
 class MovieListData {
   final String id;
@@ -92,6 +93,20 @@ class MovieListService extends ChangeNotifier {
     
     print('🎬 Initializing Movie List Service...');
     
+    await _performInitialization();
+  }
+
+  // Force reinitialize (used on login/logout)
+  Future<void> reinitialize() async {
+    print('🔄 Reinitializing Movie List Service...');
+    _isInitialized = false;
+    _lists.clear();
+    _movieRatings.clear();
+    await _performInitialization();
+  }
+
+  // Actual initialization logic
+  Future<void> _performInitialization() async {
     try {
       // Load from storage first
       await _loadFromStorage();
@@ -143,29 +158,89 @@ class MovieListService extends ChangeNotifier {
   // Load all lists from storage
   Future<void> _loadFromStorage() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final listsJson = prefs.getString('all_movie_lists');
-      
-      if (listsJson != null && listsJson.isNotEmpty) {
-        final decoded = jsonDecode(listsJson) as Map<String, dynamic>;
-        _lists.clear();
-        decoded.forEach((key, value) {
-          _lists[key] = MovieListData.fromJson(value);
-        });
-        print('📂 Loaded ${_lists.length} lists from storage');
-      } else {
-        print('📂 No existing lists found in storage');
+      // Try loading from Firestore first
+      try {
+        final cloudLists = await FirestoreService().loadMovieLists();
+        if (cloudLists != null && cloudLists.isNotEmpty) {
+          _lists.clear();
+          cloudLists.forEach((key, value) {
+            _lists[key] = MovieListData.fromJson(value);
+          });
+          print('📂 Loaded ${_lists.length} lists from Firestore');
+          
+          // Also update local storage
+          final prefs = await SharedPreferences.getInstance();
+          final listsJson = jsonEncode(
+            Map.fromEntries(_lists.entries.map((e) => MapEntry(e.key, e.value.toJson()))),
+          );
+          await prefs.setString('all_movie_lists', listsJson);
+        }
+      } catch (e) {
+        print('Could not load lists from Firestore, falling back to local: $e');
       }
 
-      // Load ratings
-      final ratingsJson = prefs.getString('movie_ratings');
-      if (ratingsJson != null && ratingsJson.isNotEmpty) {
-        final decoded = jsonDecode(ratingsJson) as Map<String, dynamic>;
-        _movieRatings.clear();
-        decoded.forEach((key, value) {
-          _movieRatings[int.parse(key)] = value as double;
-        });
-        print('⭐ Loaded ${_movieRatings.length} ratings from storage');
+      // Fall back to SharedPreferences if Firestore didn't have data
+      if (_lists.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final listsJson = prefs.getString('all_movie_lists');
+        
+        if (listsJson != null && listsJson.isNotEmpty) {
+          final decoded = jsonDecode(listsJson) as Map<String, dynamic>;
+          _lists.clear();
+          decoded.forEach((key, value) {
+            _lists[key] = MovieListData.fromJson(value);
+          });
+          print('📂 Loaded ${_lists.length} lists from local storage');
+          
+          // Sync to Firestore if we have local data
+          if (_lists.isNotEmpty) {
+            await FirestoreService().saveMovieLists(
+              Map.fromEntries(_lists.entries.map((e) => MapEntry(e.key, e.value.toJson()))),
+            );
+            print('Synced ${_lists.length} local lists to Firestore');
+          }
+        } else {
+          print('📂 No existing lists found in storage');
+        }
+      }
+
+      // Load ratings (try Firestore first)
+      try {
+        final cloudRatings = await FirestoreService().loadRatings();
+        if (cloudRatings != null && cloudRatings.isNotEmpty) {
+          _movieRatings.clear();
+          _movieRatings.addAll(cloudRatings);
+          print('⭐ Loaded ${_movieRatings.length} ratings from Firestore');
+          
+          // Update local storage
+          final prefs = await SharedPreferences.getInstance();
+          final ratingsJson = jsonEncode(
+            Map.fromEntries(_movieRatings.entries.map((e) => MapEntry(e.key.toString(), e.value))),
+          );
+          await prefs.setString('movie_ratings', ratingsJson);
+        }
+      } catch (e) {
+        print('Could not load ratings from Firestore, falling back to local: $e');
+      }
+
+      // Fall back to local ratings if Firestore didn't have data
+      if (_movieRatings.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final ratingsJson = prefs.getString('movie_ratings');
+        if (ratingsJson != null && ratingsJson.isNotEmpty) {
+          final decoded = jsonDecode(ratingsJson) as Map<String, dynamic>;
+          _movieRatings.clear();
+          decoded.forEach((key, value) {
+            _movieRatings[int.parse(key)] = value as double;
+          });
+          print('⭐ Loaded ${_movieRatings.length} ratings from local storage');
+          
+          // Sync to Firestore if we have local data
+          if (_movieRatings.isNotEmpty) {
+            await FirestoreService().saveRatings(_movieRatings);
+            print('Synced ${_movieRatings.length} local ratings to Firestore');
+          }
+        }
       }
     } catch (e) {
       print('❌ Error loading lists from storage: $e');
@@ -186,6 +261,12 @@ class MovieListService extends ChangeNotifier {
         Map.fromEntries(_movieRatings.entries.map((e) => MapEntry(e.key.toString(), e.value))),
       );
       await prefs.setString('movie_ratings', ratingsJson);
+      
+      // Sync to Firestore
+      await FirestoreService().saveMovieLists(
+        Map.fromEntries(_lists.entries.map((e) => MapEntry(e.key, e.value.toJson()))),
+      );
+      await FirestoreService().saveRatings(_movieRatings);
       
       print('💾 Saved ${_lists.length} lists and ${_movieRatings.length} ratings to storage');
     } catch (e) {

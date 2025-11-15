@@ -6,6 +6,8 @@ class Movie {
   final String? releaseDate;
   final double? voteAverage;
   final String? overview;
+  final String mediaType; // 'movie' or 'tv'
+  final String? originalLanguage;
 
   Movie({
     required this.id,
@@ -15,6 +17,8 @@ class Movie {
     this.releaseDate,
     this.voteAverage,
     this.overview,
+    this.mediaType = 'movie',
+    this.originalLanguage,
   });
 
   String get posterUrl =>
@@ -30,15 +34,26 @@ class Movie {
           ? releaseDate!.substring(0, 4)
           : '';
 
+  String get displayTitle => mediaType == 'tv' ? '$title (TV)' : title;
+
   factory Movie.fromJson(Map<String, dynamic> json) {
+    // Determine media type
+    String type = json['media_type'] ?? 'movie';
+    
+    // For TV shows, use 'name' instead of 'title' and 'first_air_date' instead of 'release_date'
+    String title = json['title'] ?? json['name'] ?? 'Unknown';
+    String? releaseDate = json['release_date'] ?? json['first_air_date'];
+    
     return Movie(
       id: json['id'] ?? 0,
-      title: json['title'] ?? 'Unknown',
+      title: title,
       posterPath: json['posterPath'] ?? json['poster_path'],
       backdropPath: json['backdropPath'] ?? json['backdrop_path'],
-      releaseDate: json['releaseDate'] ?? json['release_date'],
+      releaseDate: releaseDate,
       voteAverage: (json['voteAverage'] ?? json['vote_average'])?.toDouble(),
       overview: json['overview'],
+      mediaType: json['mediaType'] ?? type,
+      originalLanguage: json['originalLanguage'] ?? json['original_language'],
     );
   }
 
@@ -51,6 +66,8 @@ class Movie {
       'releaseDate': releaseDate,
       'voteAverage': voteAverage,
       'overview': overview,
+      'mediaType': mediaType,
+      'originalLanguage': originalLanguage,
     };
   }
 }
